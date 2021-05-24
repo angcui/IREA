@@ -171,7 +171,6 @@ GetEnrichmentScoreProjection = function(input_profile, input_celltype, genediff_
 
 
   # Load reference data
-  # TODO: make better reference data file after re-identifying cell types
   load("refdata.RData")
   lig_seurat_sub = subset(lig_seurat, celltype == input_celltype)
   profiles_cc = as.matrix(lig_seurat_sub@assays[['RNA']][,])
