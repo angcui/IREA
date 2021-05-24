@@ -16,19 +16,14 @@ set.seed(0)
 
 
 
+#### Immune response enrichment analysis functions #####
 
-
-
-#### Immune response enrichment score functions #####
-
-#' Get enrichment score
+#' IREA analysis for gene set input - rank sum test method
 #'
-#' \code{GetEnrichmentScore} Compute enrichment score using the pathway overrepresentation test
-#' which is commonly involves the hypergeometric test
+#' \code{GeneSetEnrichmentScore} Perform statistical test (Wilcoxon rank sum test) for cytokine response enrichment when the user input is a list of genes
 #'
 #' @param    degs              A list of differentially expresssed genes that user would like to investigate
-#' @param    input_celltype          Choose from one of the listed cell types that most resemble the input
-#'
+#' @param    input_celltype    Choose from one of the listed cell types that most resembles the input
 #'
 
 GeneSetEnrichmentScore = function(degs, input_celltype) {
@@ -41,7 +36,7 @@ GeneSetEnrichmentScore = function(degs, input_celltype) {
   # Load reference data
   ## TODO: to speed up, can save each cell type into a different Rds file
   ## TODO: to speed up, subset the gene list to only include the genes that are >0.01 (or other threshold) between cytokine and PBS
-  load("~/Dropbox (Personal)/Hacohen/ligands/rdata/201209-ligands-alldata-seurat-p3-subsample-100cells.RData")
+  load("refdata.RData")
   lig_seurat = subset(lig_seurat, celltype == input_celltype)
   cytokines = setdiff(sort(unique(lig_seurat@meta.data$sample)), "PBS")
   profiles_cc = as.matrix(lig_seurat@assays[['RNA']][,])
@@ -56,24 +51,29 @@ GeneSetEnrichmentScore = function(degs, input_celltype) {
   scores_tmp$Group.1 = NULL
   scores = apply(scores_tmp, 1, sum)
   scores = scores - scores["PBS"]
-  scores_df = data.frame(scores)
-  scores_df = scores_df[cytokines,, drop = FALSE]
+  df_irea = data.frame(scores)
+  df_irea = df_irea[cytokines,, drop = FALSE]
+
+  # Assess the significance of enrichment using the Wilcoxon rank sum test between gene set scores on cytokine treated cells
+  # and gene set scores on PBS treated cells
   scores_pvals = sapply(cytokines, function(x){
     test_res = wilcox.test(apply(profiles_cc_genes[, rownames(subset(lig_seurat@meta.data, sample == x))], 2, sum),
                            apply(profiles_cc_genes[, rownames(subset(lig_seurat@meta.data, sample == "PBS"))], 2, sum));
     return(test_res$p.value)
   })
-  scores_df$pval = as.vector(scores_pvals)
-  scores_df$padj = p.adjust(scores_df$pval, method = "fdr")
+  df_irea$pval = as.vector(scores_pvals)
+
+  # Perform multiple hypothesis testing correction on all tests
+  df_irea$padj = p.adjust(df_irea$pval, method = "fdr")
 
   # Add pseudocount for log transform
-  scores_df$nlog10_padj = -log10(scores_df$padj+0.000001)
+  df_irea$nlog10_padj = -log10(df_irea$padj+0.000001)
 
   # Sort results by p-value
-  scores_df$cytokine = rownames(scores_df)
-  scores_df$cytokine = factor(scores_df$cytokine, levels = scores_df$cytokine[order(scores_df$nlog10_padj)])
+  df_irea$cytokine = rownames(df_irea)
+  df_irea$cytokine = factor(df_irea$cytokine, levels = df_irea$cytokine[order(df_irea$nlog10_padj)])
 
-  ggplot(scores_df, aes(x = cytokine, y = nlog10_padj)) +
+  ggplot(df_irea, aes(x = cytokine, y = nlog10_padj)) +
     geom_hline(yintercept = 2, color = "blue", linetype = 'dotted') +
     geom_bar(stat = "identity", fill = "orange") +
     coord_flip() +
@@ -81,33 +81,30 @@ GeneSetEnrichmentScore = function(degs, input_celltype) {
     xlab("Cytokine response") +
     ylab("IREA-GeneSet -log10 (FDR)")
 
+  return(df_irea)
+
 }
 
 
 
-#### Immune response enrichment score functions #####
+#### Immune response enrichment analysis functions #####
 
-#' Get enrichment score - Fisher's test method
+#' IREA analysis for gene set input - Fisher's test method
 #'
-#' \code{GeneSetEnrichmentHyperTest} Compute enrichment score using the pathway overrepresentation test
-#' which is commonly involves the hypergeometric test
+#' \code{GeneSetEnrichmentHyperTest} Compute enrichment score using the pathway overrepresentation test,
+#' the most commonly used method for pathway analysis which uses the hypergeometric test
 #'
 #' @param    degs              A list of differentially expresssed genes that user would like to investigate
-#' @param    celltype          Choose from one of the listed cell types that most resemble the input
+#' @param    input_celltype    Choose from one of the listed cell types that most resemble the input
 #'
 
-GeneSetEnrichmentHyperTest = function(degs,
-                                      celltype) {
-  `%notin%` = Negate(`%in%`)
+GeneSetEnrichmentHyperTest = function(degs, input_celltype) {
   celltypes = c("B_cell", "cDC1", "cDC2", "eTAC", "ILC", "Macrophage", "MigDC",
                 "Monocyte", "Neutrophil", "NK_cell", "pDC", "T_cell_CD4", "T_cell_CD8",
                 "T_cell_gd", "Treg")
-  #if (celltype %notin% celltypes) stop("cell type must be one of the following: ")
+  if (input_celltype %notin% celltypes) stop(paste0("cell type must be one of the following: ", paste0(celltypes, collapse = ", ")))
 
-  #ref_deg = readRDS("../data/ref_deg.Rda")
-  #ref_deg_sig = subset(ref_deg, p_val < 0.01 & avg_logFC > 0)
-  #saveRDS(ref_deg_sig, file = "../data/ref_deg_sig.Rda")
-
+  # Load the pre-computed significantly differentially expressed genes for each cytokine in each cell type
   ref_deg_sig = readRDS("../data/ref_deg_sig.Rda")
   ref_expressed_genes = readRDS("../data/ref_expressed_genes_per_celltype.Rda")
 
@@ -120,6 +117,7 @@ GeneSetEnrichmentHyperTest = function(degs,
 
   samples = sort(unique(ref_deg_sig$cytokine))
 
+  # Perform fisher's exact test
   test_res = c()
   for (ss in samples) {
     markers_ss = subset(ref_deg_sig_celltype, cytokine == ss)
@@ -136,8 +134,13 @@ GeneSetEnrichmentHyperTest = function(degs,
     test_res = c(test_res, res)
   }
 
-  # construct a result matrix and order by p-value
+  # Construct a result matrix
   df_fisher = data.frame(sample = samples, test_pval = test_res)
+
+  # Perform multiple hypothesis testing correction
+  df_fisher$padj = p.adjust(df_fisher$test_res, method = "fdr")
+
+  # Order the results by p-value
   df_fisher = df_fisher[order(df_fisher$test_pval), ]
 
   return(df_fisher)
@@ -150,16 +153,16 @@ GeneSetEnrichmentHyperTest = function(degs,
 
 #' IREA analysis for transcriptome matrix input
 #'
-#' \code{GetEnrichmentScoreProjection} Compute enrichment score using the pathway overrepresentation test
-#' which is commonly involves the hypergeometric test
+#' \code{GetEnrichmentScoreProjection} Compute enrichment score using the Wilcoxon rank sum test between
+#' cosine similarity scores with cytokine-treated samples and cosine similarity scores with control samples
 #'
-#' @param    input_profile    Gene expression matrix.
+#' @param    input_profile     Gene expression matrix
 #' @param    input_celltype    Choose from one of the listed cell types that most resemble the input
-#'
+#' @param    genediff_cutoff   Only include the genes that are differentially expressed above this threshold
+#' between cytokine-treated samples and PBS samples to speed up computation
 
 
-GetEnrichmentScoreProjection = function(input_profile,
-                                        input_celltype) {
+GetEnrichmentScoreProjection = function(input_profile, input_celltype, genediff_cutoff = 0.25) {
   `%notin%` = Negate(`%in%`)
   celltypes = c("B_cell", "cDC1", "cDC2", "eTAC", "ILC", "Macrophage", "MigDC",
                 "Monocyte", "Neutrophil", "NK_cell", "pDC", "T_cell_CD4", "T_cell_CD8",
@@ -169,7 +172,7 @@ GetEnrichmentScoreProjection = function(input_profile,
 
   # Load reference data
   # TODO: make better reference data file after re-identifying cell types
-  load("../../../Hacohen/ligands/rdata/200417-ligands-alldata-seurat-p3-subsample.RData")
+  load("refdata.RData")
   lig_seurat_sub = subset(lig_seurat, celltype == input_celltype)
   profiles_cc = as.matrix(lig_seurat_sub@assays[['RNA']][,])
 
@@ -186,14 +189,15 @@ GetEnrichmentScoreProjection = function(input_profile,
   input_profile_agg$Group.1 = NULL
 
   gene_diff = apply(input_profile_agg, 2, function(x){max(x-x['PBS'])})
-  genes_large_diff = names(gene_diff)[gene_diff>0.25]
 
+  # Only use the genes that are significantly differentially expressed to speed up computation
+  genes_large_diff = names(gene_diff)[gene_diff>genediff_cutoff]
   profiles_cc = profiles_cc[genes_large_diff, ]
   input_profile = input_profile[genes_large_diff, , drop = FALSE]
 
   dist_input_mat = cbind(input_profile, profiles_cc)
 
-  # Project all input vectors onto reference panel
+  # Project all input vectors onto the reference panel using the cosine similarity metric
   library(philentropy)
   library(reshape2)
   projection_scores_raw = distance(t(dist_input_mat), method = "cosine")
@@ -203,6 +207,7 @@ GetEnrichmentScoreProjection = function(input_profile,
   rownames(projection_scores) = colnames(input_profile)
   colnames(projection_scores) = colnames(profiles_cc)
 
+  # Format the results matrix
   input_samples = colnames(input_profile)
   reference_samples = setdiff(sort(unique(lig_seurat_sub@meta.data$sample)), "PBS")
 
@@ -212,6 +217,7 @@ GetEnrichmentScoreProjection = function(input_profile,
   df_irea$ES = NA
   names(df_irea) = c("Sample", "Cytokine", "pval", "ES")
 
+  # Compute enrichment score (mean difference between conditions) and p-value
   for (ii in input_samples) {
     for (x in reference_samples) {
       cols_cytokine = which(lig_seurat_sub@meta.data$sample == x);
@@ -231,9 +237,10 @@ GetEnrichmentScoreProjection = function(input_profile,
     }
   }
 
+  # Perform multiple hypothesis testing correction
   df_irea$padj = p.adjust(df_irea$pval, method = "fdr")
 
-  df_irea_sig = subset(df_irea, padj < 0.01)
+  #df_irea_sig = subset(df_irea, padj < 0.01)
 
   return(df_irea)
 }

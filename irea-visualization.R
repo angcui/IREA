@@ -1,34 +1,37 @@
-#### Immune response enrichment score visualization functions #####
+#### Immune response enrichment analysis visualization functions #####
 
 #' Compass plot
 #'
 #' \code{IreaCompassPlot} Visualize IREA results on a compass plot
 #'
-#' @param    degs              A list of differentially expresssed genes that user would like to investigate
-#' @param    input_celltype    Choose from one of the listed cell types that most resemble the input
-#'
+#' @param    df_irea        IREA results data frame returned from one of the "GeneSetEnrichmentScore",
+#' "GeneSetEnrichmentHyperTest", or "GetEnrichmentScoreProjection" methods
+#' @param    color_by       Color the IREA compass plot by p-value or effect size; default is p-value
+#' (TODO: add support for ES)
 #'
 
-IreaCompassPlot = function(df_irea, p_cutoff = 0.05,
-                               color_by = c("pval", "ES")) {
+IreaCompassPlot = function(df_irea, color_by = c("pval", "ES")) {
+  `%notin%` = Negate(`%in%`)
+
   library(ggplot2)
   library(plyr)
-  cytokines_spreadsheet = read.csv("~/Dropbox (Personal)/Hacohen/ligands/spreadsheets/cytokine_lists.csv")
 
   df_irea$nlog10p = -log10(df_irea$padj + 0.00001)
   df_irea$nlog10p[df_irea$nlog10p<0]=0.000000001
-  `%notin%` = Negate(`%in%`)
-  df_irea = subset(df_irea, Cytokine %notin% c("IL2+IL15", "IL2+IFNg"))
 
+  # For visualization purposes, visualize positive enrichment with red, negative with blue. Darker colors represent stronger p-value
   df_irea$nlog10p_signed = df_irea$nlog10p * sign(df_irea$ES)
   max_barlimit = max(df_irea$ES)
   min_barlimit = min(df_irea$ES)
   text_angle = c(seq(0,-180,length.out = 43), seq(360, 180, length.out = 43))
 
+  # Maps between internal name and display name for cytokines
+  cytokines_spreadsheet = read.csv("cytokine_lists.csv")
   df_irea$Cytokine_Label = mapvalues(df_irea$Cytokine, from = cytokines_spreadsheet$Cytokine_OriginalName,
                                      to = cytokines_spreadsheet$Cytokine_DisplayName)
   df_irea$Cytokine_Label = factor(df_irea$Cytokine_Label, levels = df_irea$Cytokine_Label[order(df_irea$ES)])
 
+  # Make compass plot
   text_angle = c(seq(0,-180,length.out = 43), seq(360, 180, length.out = 43))
   ggplot(df_irea, aes(x = Cytokine_Label, y = ES)) +
     theme_void() +
