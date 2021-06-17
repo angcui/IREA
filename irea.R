@@ -52,6 +52,7 @@ GeneSetEnrichmentScore = function(degs, input_celltype) {
   scores = apply(scores_tmp, 1, sum)
   scores = scores - scores["PBS"]
   df_irea = data.frame(scores)
+  names(df_irea) = "ES"
   df_irea = df_irea[cytokines,, drop = FALSE]
 
   # Assess the significance of enrichment using the Wilcoxon rank sum test between gene set scores on cytokine treated cells
@@ -70,10 +71,10 @@ GeneSetEnrichmentScore = function(degs, input_celltype) {
   df_irea$nlog10_padj = -log10(df_irea$padj+0.000001)
 
   # Sort results by p-value
-  df_irea$cytokine = rownames(df_irea)
-  df_irea$cytokine = factor(df_irea$cytokine, levels = df_irea$cytokine[order(df_irea$nlog10_padj)])
+  df_irea$Cytokine = rownames(df_irea)
+  df_irea$Cytokine = factor(df_irea$Cytokine, levels = df_irea$Cytokine[order(df_irea$nlog10_padj)])
 
-  ggplot(df_irea, aes(x = cytokine, y = nlog10_padj)) +
+  ggplot(df_irea, aes(x = Cytokine, y = nlog10_padj)) +
     geom_hline(yintercept = 2, color = "blue", linetype = 'dotted') +
     geom_bar(stat = "identity", fill = "orange") +
     coord_flip() +
