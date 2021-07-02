@@ -68,7 +68,7 @@ GeneSetEnrichmentScore = function(degs, input_celltype) {
   df_irea$padj = p.adjust(df_irea$pval, method = "fdr")
 
   # Add pseudocount for log transform
-  df_irea$nlog10_padj = -log10(df_irea$padj+0.000001)
+  df_irea$nlog10_padj = pmax(0, -log10(df_irea$padj+0.000001))
 
   # Sort results by p-value
   df_irea$Cytokine = rownames(df_irea)
@@ -113,9 +113,6 @@ GeneSetEnrichmentHyperTest = function(degs, input_celltype) {
   ref_deg_sig_celltype = subset(ref_deg_sig, celltype == celltype)
   ref_expressed_genes_celltype = subset(ref_expressed_genes, celltype == celltype)
 
-  # examples
-  # degs = c("Isg15", "Irf7", "Il1b", "Isg20")
-
   samples = sort(unique(ref_deg_sig$cytokine))
 
   # Perform fisher's exact test
@@ -136,15 +133,18 @@ GeneSetEnrichmentHyperTest = function(degs, input_celltype) {
   }
 
   # Construct a result matrix
-  df_fisher = data.frame(sample = samples, test_pval = test_res)
+  df_irea = data.frame(Cytokine = samples, pval = test_res)
 
   # Perform multiple hypothesis testing correction
-  df_fisher$padj = p.adjust(df_fisher$test_res, method = "fdr")
+  df_irea$padj = p.adjust(df_irea$pval, method = "fdr")
+
+  # Add pseudocount for log transform
+  df_irea$nlog10_padj = pmax(0, -log10(df_irea$padj+0.000001))
 
   # Order the results by p-value
-  df_fisher = df_fisher[order(df_fisher$test_pval), ]
+  df_irea = df_irea[order(df_irea$pval), ]
 
-  return(df_fisher)
+  return(df_irea)
 }
 
 
