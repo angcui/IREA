@@ -110,13 +110,15 @@ GeneSetEnrichmentHyperTest = function(degs, input_celltype) {
   ref_expressed_genes = readRDS("../data/ref_expressed_genes_per_celltype.Rda")
 
   # subset into the celltype of interest
-  ref_deg_sig_celltype = subset(ref_deg_sig, celltype == celltype)
-  ref_expressed_genes_celltype = subset(ref_expressed_genes, celltype == celltype)
+  ref_deg_sig_celltype = subset(ref_deg_sig, celltype == input_celltype)
+  ref_expressed_genes_celltype = subset(ref_expressed_genes, celltype == input_celltype)
 
   samples = sort(unique(ref_deg_sig$cytokine))
 
   # Perform fisher's exact test
-  test_res = c()
+  res_pvals = c()
+  res_ess = c()
+
   for (ss in samples) {
     markers_ss = subset(ref_deg_sig_celltype, cytokine == ss)
 
@@ -128,12 +130,16 @@ GeneSetEnrichmentHyperTest = function(degs, input_celltype) {
 
     mat_test = matrix(c(num_overlap, num_only_user, num_only_ref, num_neither), nrow = 2)
 
-    res = fisher.test(mat_test)$p.value
-    test_res = c(test_res, res)
+    test_pval = fisher.test(mat_test)$p.value
+    test_es = num_overlap / length(degs)
+
+    res_pvals = c(res_pvals, test_pval)
+    res_ess = c(res_ess, test_es)
+
   }
 
   # Construct a result matrix
-  df_irea = data.frame(Cytokine = samples, pval = test_res)
+  df_irea = data.frame(Cytokine = samples, ES = res_ess, pval = res_pvals)
 
   # Perform multiple hypothesis testing correction
   df_irea$padj = p.adjust(df_irea$pval, method = "fdr")
